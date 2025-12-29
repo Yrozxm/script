@@ -2,66 +2,67 @@
 -- Minimum 4 hats
 -- joao
 
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
+-- PLAYER
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local torso = character:FindFirstChild("Torso")
 local humanoid = character:WaitForChild("Humanoid")
 
-local Parts = {}
-local Attachments = {}
-local Connections = {}
-local Extended = false
 local isR6 = torso ~= nil
 
--- ALIGN FUNCTION
+-- =======================
+--  HAT / PART SYSTEM
+-- =======================
+local Parts, Attachments, Connections = {}, {}, {}
+local Extended = false
+local hue = 0 -- RGB cycle
+
 local function align(part, parent)
-    local att0 = Instance.new("Attachment", part)
-    local att1 = Instance.new("Attachment", parent)
-    att1.Position = Vector3.new(0,5,0)
+    local a0 = Instance.new("Attachment", part)
+    local a1 = Instance.new("Attachment", parent)
+    a1.Position = Vector3.new(0,5,0)
 
     local ap = Instance.new("AlignPosition", part)
-    ap.Attachment0 = att0
-    ap.Attachment1 = att1
+    ap.Attachment0 = a0
+    ap.Attachment1 = a1
     ap.MaxForce = 1e7
     ap.Responsiveness = 200
     ap.ApplyAtCenterOfMass = true
 
     local ao = Instance.new("AlignOrientation", part)
-    ao.Attachment0 = att0
-    ao.Attachment1 = att1
+    ao.Attachment0 = a0
+    ao.Attachment1 = a1
     ao.MaxTorque = 1e7
     ao.Responsiveness = 200
 
-    return att1
+    return a1
 end
 
--- CONVERT HATS TO PARTS
+-- CREATE RGB PARTS FROM HATS
 for _, acc in ipairs(character:GetChildren()) do
     if acc:IsA("Accessory") and acc:FindFirstChild("Handle") then
-        local handle = acc.Handle
-        local part = Instance.new("Part")
-        part.Size = handle.Size
-        part.CFrame = handle.CFrame
-        part.Color = handle.Color
-        part.Material = handle.Material
-        part.Transparency = handle.Transparency
-        part.Massless = true
-        part.CanCollide = false
-        part.Name = "FakePart"
-        part.Parent = workspace
+        local h = acc.Handle
+        local p = Instance.new("Part")
+        p.Size = h.Size
+        p.CFrame = h.CFrame
+        p.Material = Enum.Material.Neon
+        p.Massless = true
+        p.CanCollide = false
+        p.Name = "RGB_Part"
+        p.Parent = workspace
 
-        table.insert(Parts, part)
-        table.insert(Attachments, align(part, torso))
+        table.insert(Parts, p)
+        table.insert(Attachments, align(p, torso))
         acc:Destroy()
     end
 end
 
--- UPDATE POSITIONS
 local function updatePositions()
     for i, att in ipairs(Attachments) do
         if not Extended then
@@ -79,7 +80,6 @@ local function updatePositions()
 end
 updatePositions()
 
--- TOGGLE EXTEND
 Connections[#Connections+1] = UIS.InputBegan:Connect(function(input,gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.Q then
@@ -88,160 +88,139 @@ Connections[#Connections+1] = UIS.InputBegan:Connect(function(input,gp)
     end
 end)
 
--- NETLESS PARTS
-Connections[#Connections+1] = RunService.Heartbeat:Connect(function()
-    for _, part in ipairs(Parts) do
-        part.AssemblyLinearVelocity = Vector3.new(-30,0,0)
-        part.AssemblyAngularVelocity = Vector3.zero
-    end
-end)
+-- NETLESS + RGB LOOP
+Connections[#Connections+1] = RunService.Heartbeat:Connect(function(dt)
+    hue = (hue + dt * 0.25) % 1
+    local color = Color3.fromHSV(hue,1,1)
 
--- CLEANUP ON DEATH
-humanoid.Died:Connect(function()
-    for _, c in ipairs(Connections) do
-        c:Disconnect()
-    end
     for _, p in ipairs(Parts) do
-        p:Destroy()
+        p.Color = color
+        p.AssemblyLinearVelocity = Vector3.new(-30,0,0)
+        p.AssemblyAngularVelocity = Vector3.zero
     end
 end)
 
--- NOTIFICATION FUNCTION
-local function showNotification(message)
-    local notificationGui = Instance.new("ScreenGui")
-    notificationGui.Name = "NotificationGui"
-    notificationGui.Parent = game.CoreGui
+humanoid.Died:Connect(function()
+    for _, c in ipairs(Connections) do c:Disconnect() end
+    for _, p in ipairs(Parts) do p:Destroy() end
+end)
 
-    local notificationFrame = Instance.new("Frame")
-    notificationFrame.Size = UDim2.new(0, 300, 0, 50)
-    notificationFrame.Position = UDim2.new(0.5, -150, 1, -60)
-    notificationFrame.AnchorPoint = Vector2.new(0.5, 1)
-    notificationFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    notificationFrame.BorderSizePixel = 0
-    notificationFrame.Parent = notificationGui
+-- =======================
+--  NOTIFICATION
+-- =======================
+local function notify(msg)
+    local sg = Instance.new("ScreenGui", game.CoreGui)
+    local f = Instance.new("Frame", sg)
+    f.Size = UDim2.new(0,320,0,48)
+    f.Position = UDim2.new(0.5,-160,1,-70)
+    f.AnchorPoint = Vector2.new(0.5,1)
+    f.BackgroundColor3 = Color3.fromRGB(25,25,30)
+    f.BackgroundTransparency = 1
+    f.BorderSizePixel = 0
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0,14)
 
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(0,10)
-    uicorner.Parent = notificationFrame
+    Instance.new("UIStroke", f).Transparency = .6
 
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1,-20,1,0)
-    textLabel.Position = UDim2.new(0,10,0,0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.Text = message .. " | by pyst"
-    textLabel.TextColor3 = Color3.fromRGB(255,255,255)
-    textLabel.Font = Enum.Font.SourceSansBold
-    textLabel.TextSize = 18
-    textLabel.TextXAlignment = Enum.TextXAlignment.Left
-    textLabel.Parent = notificationFrame
+    local t = Instance.new("TextLabel", f)
+    t.Size = UDim2.new(1,-20,1,0)
+    t.Position = UDim2.new(0,10,0,0)
+    t.BackgroundTransparency = 1
+    t.Text = msg .. " | yrozxm 🐀"
+    t.TextColor3 = Color3.fromRGB(240,240,240)
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 16
+    t.TextTransparency = 1
+    t.TextXAlignment = Enum.TextXAlignment.Left
 
-    notificationFrame.BackgroundTransparency = 1
-    textLabel.TextTransparency = 1
+    TweenService:Create(f, TweenInfo.new(.4,Enum.EasingStyle.Quint), {BackgroundTransparency=0}):Play()
+    TweenService:Create(t, TweenInfo.new(.4,Enum.EasingStyle.Quint), {TextTransparency=0}):Play()
 
-    TweenService:Create(notificationFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(textLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
-
-    task.delay(5,function()
-        TweenService:Create(notificationFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {BackgroundTransparency=1}):Play()
-        TweenService:Create(textLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {TextTransparency=1}):Play()
-        task.delay(0.5,function() notificationGui:Destroy() end)
+    task.delay(4,function()
+        TweenService:Create(f, TweenInfo.new(.3), {BackgroundTransparency=1}):Play()
+        TweenService:Create(t, TweenInfo.new(.3), {TextTransparency=1}):Play()
+        task.delay(.3,function() sg:Destroy() end)
     end)
 end
 
--- Show rig type notification
-if isR6 then
-    showNotification("🌟 R6 detected!")
-else
-    showNotification("✨ R15 detected!")
+notify(isR6 and "🌟 R6 detected!" or "✨ R15 detected!")
+
+-- =======================
+--  MODERN GUI (REFINADO)
+-- =======================
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "BangGui"
+
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0,340,0,360)
+main.Position = UDim2.new(0.5,0,0.5,0)
+main.AnchorPoint = Vector2.new(0.5,0.5)
+main.BackgroundColor3 = Color3.fromRGB(24,24,28)
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,18)
+
+local stroke = Instance.new("UIStroke", main)
+stroke.Thickness = 1
+stroke.Transparency = .4
+
+-- TOP BAR
+local top = Instance.new("Frame", main)
+top.Size = UDim2.new(1,0,0,42)
+top.BackgroundTransparency = 1
+
+local title = Instance.new("TextLabel", top)
+title.Size = UDim2.new(1,-120,1,0)
+title.Position = UDim2.new(0,16,0,0)
+title.BackgroundTransparency = 1
+title.Text = "Yrozxm Script"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(235,235,240)
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local function topButton(txt, x, color)
+    local b = Instance.new("TextButton", top)
+    b.Size = UDim2.new(0,28,0,28)
+    b.Position = UDim2.new(1,x,0,7)
+    b.Text = txt
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.BackgroundColor3 = color
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
 end
 
--- CREATE DARK GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "BangGui"
-gui.Parent = game.CoreGui
+local btnMin = topButton("–",-76,Color3.fromRGB(180,160,60))
+local btnClose = topButton("✕",-40,Color3.fromRGB(200,80,80))
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 300)
-mainFrame.AnchorPoint = Vector2.new(0.5,0.5)
-mainFrame.Position = UDim2.new(0.5,0,0.5,0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = gui
-
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(0,20)
-uicorner.Parent = mainFrame
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,-60,0,30)
-title.Position = UDim2.new(0,10,0,0)
-title.BackgroundTransparency = 1
-title.Text = "Yrozxm Script 🐀"
-title.TextColor3 = Color3.fromRGB(220,220,220)
-title.Font = Enum.Font.SourceSansBold
-title.TextSize = 24
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = mainFrame
-
--- Close Button
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0,30,0,30)
-closeButton.Position = UDim2.new(1,-40,0,0)
-closeButton.BackgroundColor3 = Color3.fromRGB(200,50,50)
-closeButton.Text = "X"
-closeButton.Font = Enum.Font.SourceSansBold
-closeButton.TextSize = 20
-closeButton.TextColor3 = Color3.fromRGB(255,255,255)
-closeButton.Parent = mainFrame
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0,10)
-closeCorner.Parent = closeButton
-
-closeButton.MouseButton1Click:Connect(function()
+btnClose.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
--- Minimize Button
-local minimizeButton = Instance.new("TextButton")
-minimizeButton.Size = UDim2.new(0,30,0,30)
-minimizeButton.Position = UDim2.new(1,-80,0,0)
-minimizeButton.BackgroundColor3 = Color3.fromRGB(180,180,50)
-minimizeButton.Text = "-"
-minimizeButton.Font = Enum.Font.SourceSansBold
-minimizeButton.TextSize = 20
-minimizeButton.TextColor3 = Color3.fromRGB(255,255,255)
-minimizeButton.Parent = mainFrame
-
-local minimizeCorner = Instance.new("UICorner")
-minimizeCorner.CornerRadius = UDim.new(0,10)
-minimizeCorner.Parent = minimizeButton
-
 local minimized = false
-minimizeButton.MouseButton1Click:Connect(function()
+btnMin.MouseButton1Click:Connect(function()
     minimized = not minimized
-    if minimized then
-        mainFrame:TweenSize(UDim2.new(0,300,0,30), Enum.EasingDirection.In, Enum.EasingStyle.Quint,0.5)
-    else
-        mainFrame:TweenSize(UDim2.new(0,300,0,300), Enum.EasingDirection.Out, Enum.EasingStyle.Quint,0.5)
-    end
+    main:TweenSize(
+        minimized and UDim2.new(0,340,0,42) or UDim2.new(0,340,0,360),
+        Enum.EasingDirection.Out, Enum.EasingStyle.Quint, .4, true
+    )
 end)
 
--- Scrolling Frame
-local scrollingFrame = Instance.new("ScrollingFrame")
-scrollingFrame.Size = UDim2.new(1,-20,1,-50)
-scrollingFrame.Position = UDim2.new(0,10,0,40)
-scrollingFrame.BackgroundTransparency = 1
-scrollingFrame.CanvasSize = UDim2.new(0,0,0,300)
-scrollingFrame.ScrollBarThickness = 6
-scrollingFrame.Parent = mainFrame
+-- CONTENT
+local content = Instance.new("ScrollingFrame", main)
+content.Position = UDim2.new(0,16,0,52)
+content.Size = UDim2.new(1,-32,1,-68)
+content.ScrollBarThickness = 4
+content.BackgroundTransparency = 1
 
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0,10)
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.Parent = scrollingFrame
+local list = Instance.new("UIListLayout", content)
+list.Padding = UDim.new(0,10)
+list.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- Buttons
+list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    content.CanvasSize = UDim2.new(0,0,0,list.AbsoluteContentSize.Y + 10)
+end)
+
 local buttons = {
     {name="🎯 Bang V2", r6="https://pastebin.com/raw/aPSHMV6K", r15="https://pastebin.com/raw/1ePMTt9n"},
     {name="🎉 Get Banged", r6="https://pastebin.com/raw/zHbw7ND1", r15="https://pastebin.com/raw/7hvcjDnW"},
@@ -250,25 +229,51 @@ local buttons = {
     {name="⚡ Jerk", r6="https://pastefy.app/wa3v2Vgm/raw", r15="https://pastefy.app/YZoglOyJ/raw"}
 }
 
-for _, buttonData in ipairs(buttons) do
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0.8,0,0,40)
-    button.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    button.Text = buttonData.name
-    button.Font = Enum.Font.SourceSansBold
-    button.TextSize = 20
-    button.TextColor3 = Color3.fromRGB(255,255,255)
-    button.Parent = scrollingFrame
+for _, d in ipairs(buttons) do
+    local b = Instance.new("TextButton", content)
+    b.Size = UDim2.new(1,0,0,44)
+    b.BackgroundColor3 = Color3.fromRGB(45,45,55)
+    b.Text = d.name
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 16
+    b.TextColor3 = Color3.fromRGB(245,245,250)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,12)
 
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(0,10)
-    uicorner.Parent = button
+    local hover = TweenService:Create(b, TweenInfo.new(.15), {BackgroundColor3 = Color3.fromRGB(65,65,80)})
+    local leave = TweenService:Create(b, TweenInfo.new(.15), {BackgroundColor3 = Color3.fromRGB(45,45,55)})
 
-    button.MouseButton1Click:Connect(function()
-        if isR6 then
-            loadstring(game:HttpGet(buttonData.r6))()
-        else
-            loadstring(game:HttpGet(buttonData.r15))()
-        end
+    b.MouseEnter:Connect(function() hover:Play() end)
+    b.MouseLeave:Connect(function() leave:Play() end)
+
+    b.MouseButton1Click:Connect(function()
+        loadstring(game:HttpGet(isR6 and d.r6 or d.r15))()
     end)
 end
+
+-- =======================
+--  DRAG (TITLE BAR)
+-- =======================
+local dragging, dragStart, startPos = false
+
+top.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = i.Position
+        startPos = main.Position
+        i.Changed:Connect(function()
+            if i.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+top.InputChanged:Connect(function(i)
+    if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local d = i.Position - dragStart
+        main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + d.X,
+            startPos.Y.Scale, startPos.Y.Offset + d.Y
+        )
+    end
+end)
